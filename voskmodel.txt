@@ -1,0 +1,76 @@
+import vosk
+import pyaudio
+import json
+from voice_recognition import recognize_speech  # Ensure this function is defined in voice_recognition.py
+from move_parser import parse_move  # Assuming parse_move is in this module
+from chess_game import ChessGame
+import chess_gui
+import threading
+
+def main():
+    game = ChessGame()
+    
+    # Initialize the Vosk model once
+    model = vosk.Model(r"D:\projects\voice controlled\models\vosk-model-small-en-us-0.15")  # Use raw string literal for path
+    
+    # Start the GUI in a separate thread
+    chess_gui_thread = threading.Thread(target=chess_gui.chess_gui_loop, args=(game,))
+    chess_gui_thread.start()
+    
+    while not game.board.is_game_over():
+        # Capture the voice command using Vosk
+        recognized_text = recognize_speech(model)  # Pass the model as an argument
+        
+        if recognized_text:
+            # Parse the recognized text into a move
+            move_dict = parse_move(recognized_text)
+            
+            if move_dict:
+                # Try to apply the move to the game
+                if game.apply_move(move_dict):
+                    print(f"Move applied: {recognized_text}")
+                else:
+                    # Invalid move feedback
+                    print(f"Invalid move: {recognized_text}. Please try again.")
+            else:
+                # Parsing failed feedback
+                print("Could not parse the move. Please speak clearly.")
+        else:
+            # Speech recognition failed feedback
+            print("Could not understand your command. Please try again.")
+    
+    # End of game feedback
+    print("Game Over!")
+    print(game.board.result())  # Print the result of the game
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+import vosk
+import pyaudio
+import json
+
+def recognize_speech(model):
+    recognizer = vosk.KaldiRecognizer(model, 16000)  # Set the sample rate to 16000
+
+    p = pyaudio.PyAudio()
+    stream = p.open(format=pyaudio.paInt16, channels=1, rate=16000, input=True, frames_per_buffer=4096)
+    stream.start_stream()
+
+    print("Listening for your move...")
+
+    while True:
+        data = stream.read(4096, exception_on_overflow=False)
+        
+        if recognizer.AcceptWaveform(data):
+            result = recognizer.Result()
+            print(f"Recognized speech: {result}")
+            return json.loads(result).get("text", "")  # Extract and return the recognized text
+
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
